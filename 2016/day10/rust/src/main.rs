@@ -79,11 +79,15 @@ fn main() {
                 state.set_value(target, *value);
             },
             Instruction::Compare { id, low_target, high_target } => {
-                let val1 = state.bot_data[*id].0.unwrap();
-                let val2 = state.bot_data[*id].1.unwrap();
+                let t = state.bot_data[*id];
+                let val1 = t.0.unwrap();
+                let val2 = t.1.unwrap();
 
-                let low_val  = if val1 < val2 { val1 } else { val2 };
-                let high_val = if val1 < val2 { val2 } else { val1 };
+                let (low_val, high_val) = if val1 < val2 {
+                    (val1, val2)
+                } else {
+                    (val2, val1)
+                };
 
                 if val1 == 61 && val2 == 17 {
                     println!("bot {id} is comparing {val1} to {val2}");
