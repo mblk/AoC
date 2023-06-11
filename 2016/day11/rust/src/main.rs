@@ -31,11 +31,9 @@ fn find_minimum_steps_to_goal(initial_state: State, num_elements: u8) -> u32 {
         let (current_state, num_steps) = open_list.pop_front().unwrap();
         
         if current_state.is_goal(num_elements) {
-            println!("reached GOAL after {num_steps} steps!");
+            println!("reached goal:");
             current_state.pretty_print(num_elements);
-            //continue;
-
-            // Because we use BFS, this is the optimal solutions.
+            // Because we use BFS, this is the optimal solution.
             return num_steps;
         }
 
@@ -43,7 +41,7 @@ fn find_minimum_steps_to_goal(initial_state: State, num_elements: u8) -> u32 {
             if closed_list.contains(&next_state.value) { continue; }
             if !next_state.is_legal(num_elements) { continue; }
 
-            closed_list.insert(next_state.value); // XXX here?
+            closed_list.insert(next_state.value);
             open_list.push_back((next_state, num_steps+1));
         }
     }
@@ -65,7 +63,6 @@ struct State {
 }
 
 impl State {
-
     fn new(elevator: u8, positions: &[(u8,u8)] ) -> State {
         State {
             value: Self::encode_value(elevator, positions),
@@ -73,33 +70,30 @@ impl State {
     }
 
     fn encode_value(elevator: u8, positions: &[(u8,u8)]) -> u32 {
-
         assert!(2 + 2 * positions.len() <= 32, "Too many elements, can't encode state in 32 bits");
-
         let mut offset: u32 = 0;
-        let mut v: u32 = 0;
+        let mut value: u32 = 0;
 
         assert!(elevator < 4);
-        v |= (elevator as u32) << offset;
+        value |= (elevator as u32) << offset;
         offset += 2;
 
         for pos in positions {
             assert!(pos.0 < 4);
             assert!(pos.1 < 4);
-            v |= (pos.0 as u32) << offset;
+            value |= (pos.0 as u32) << offset;
             offset += 2;
-            v |= (pos.1 as u32) << offset;
+            value |= (pos.1 as u32) << offset;
             offset += 2;
         }
-
-        return v;
+        return value;
     }
 
-    fn get_elevator_pos(&self) -> u8 {
+    fn get_elevator_position(&self) -> u8 {
         (self.value & 0x03) as u8
     }
 
-    fn get_element_pos(&self, element_id: u8) -> (u8, u8) {
+    fn get_element_position(&self, element_id: u8) -> (u8, u8) {
         let mut temp = self.value >> (2 + element_id * 4);
         let a = (temp & 0x03) as u8;
         temp = temp >> 2;
@@ -110,19 +104,19 @@ impl State {
     fn get_all_element_positions(&self, num_elements: u8) -> Vec<(u8,u8)> {
         let mut positions = Vec::new();
         for elem in 0..num_elements {
-            let p = self.get_element_pos(elem);
+            let p = self.get_element_position(elem);
             positions.push(p);
         }
         return positions;
     }
 
     fn pretty_print(&self, num_elements: u8) {
-        let elev_pos = self.get_elevator_pos();
+        let elev_pos = self.get_elevator_position();
         for floor in (0..4).rev() {
             let elev_str = if floor == elev_pos { "E" } else { "." };
             let mut pos_str: String = String::new();
             for elem in 0..num_elements {
-                let p = self.get_element_pos(elem);
+                let p = self.get_element_position(elem);
                 let gen_str: String = if p.0 == floor { format!("{elem}G ") } else { ".  ".to_string() };
                 let chip_str: String = if p.1 == floor { format!("{elem}M ") } else { ".  ".to_string() };
                 pos_str.push_str(&gen_str);
@@ -133,15 +127,14 @@ impl State {
     }
 
     fn get_all_possible_next_states(&self, num_elements: u8) -> Vec<State> {
-
         let num_floors = 4;
-        let elev_pos = self.get_elevator_pos();
+        let elev_pos = self.get_elevator_position();
         
         let mut available_gens: Vec<u8> = Vec::with_capacity(num_elements as usize);
         let mut available_chips: Vec<u8> = Vec::with_capacity(num_elements as usize);
 
         for elem in 0..num_elements {
-            let p = self.get_element_pos(elem);
+            let p = self.get_element_position(elem);
             if p.0 == elev_pos {
                 available_gens.push(elem);
             }
@@ -149,9 +142,6 @@ impl State {
                 available_chips.push(elem);
             }
         }
-
-        //println!("avail gens: {available_gens:?}");
-        //println!("avail chips: {available_chips:?}");
 
         let mut available_next_states: Vec<State> = Vec::new();
 
@@ -164,13 +154,11 @@ impl State {
             if can_go_up {
                 let pos_up = elev_pos + 1;
                 positions[*gen as usize].0 = pos_up;
-                //println!("case 1 up");
                 available_next_states.push(State::new(pos_up, &positions));
             }
             if can_go_down {
                 let pos_down = elev_pos - 1;
                 positions[*gen as usize].0 = pos_down;
-                //println!("case 1 down");
                 available_next_states.push(State::new(pos_down, &positions));
             }
         }
@@ -181,13 +169,11 @@ impl State {
             if can_go_up {
                 let pos_up = elev_pos + 1;
                 positions[*chip as usize].1 = pos_up;
-                //println!("case 2 up");
                 available_next_states.push(State::new(pos_up, &positions));
             }
             if can_go_down {
                 let pos_down = elev_pos - 1;
                 positions[*chip as usize].1 = pos_down;
-                //println!("case 2 down");
                 available_next_states.push(State::new(pos_down, &positions));
             }
         }
@@ -203,14 +189,12 @@ impl State {
                         let pos_up = elev_pos + 1;
                         positions[*gen1 as usize].0 = pos_up;
                         positions[*gen2 as usize].0 = pos_up;
-                        //println!("case 3 up");
                         available_next_states.push(State::new(pos_up, &positions));
                     }
                     if can_go_down {
                         let pos_down = elev_pos - 1;
                         positions[*gen1 as usize].0 = pos_down;
                         positions[*gen2 as usize].0 = pos_down;
-                        //println!("case 3 down");
                         available_next_states.push(State::new(pos_down, &positions));
                     }
                 }
@@ -228,14 +212,12 @@ impl State {
                         let pos_up = elev_pos + 1;
                         positions[*chip1 as usize].1 = pos_up;
                         positions[*chip2 as usize].1 = pos_up;
-                        //println!("case 4 up");
                         available_next_states.push(State::new(pos_up, &positions));
                     }
                     if can_go_down {
                         let pos_down = elev_pos - 1;
                         positions[*chip1 as usize].1 = pos_down;
                         positions[*chip2 as usize].1 = pos_down;
-                        //println!("case 4 down");
                         available_next_states.push(State::new(pos_down, &positions));
                     }
                 }
@@ -250,14 +232,12 @@ impl State {
                     let pos_up = elev_pos + 1;
                     positions[*gen as usize].0 = pos_up;
                     positions[*chip as usize].1 = pos_up;
-                    //println!("case 5 up");
                     available_next_states.push(State::new(pos_up, &positions));
                 }
                 if can_go_down {
                     let pos_down = elev_pos - 1;
                     positions[*gen as usize].0 = pos_down;
                     positions[*chip as usize].1 = pos_down;
-                    //println!("case 5 down");
                     available_next_states.push(State::new(pos_down, &positions));
                 }
             }
@@ -267,23 +247,19 @@ impl State {
     }
 
     fn is_legal(&self, num_elements: u8) -> bool {
-
         let positions = self.get_all_element_positions(num_elements);
-
         for elem in 0..num_elements {
-
             let is_shielded = positions[elem as usize].0 == positions[elem as usize].1;
-
             let mut is_radiated: bool = false;
 
             for other_elem in 0..num_elements {
                 if elem == other_elem { continue; }
-
                 if positions[other_elem as usize].0 == positions[elem as usize].1 {
                     is_radiated = true;
                 }
             }
 
+            // Fried chip?
             if is_radiated && !is_shielded {
                 return false;
             }
@@ -296,9 +272,10 @@ impl State {
         let num_floors = 4;
         let goal_floor = num_floors - 1;
 
-        let p = self.get_all_element_positions(num_elements);
-
-        return p.iter().all(|t| t.0 == goal_floor && t.1 == goal_floor);
+        // All the things at the top floor?
+        return self.get_all_element_positions(num_elements)
+            .iter()
+            .all(|t| t.0 == goal_floor && t.1 == goal_floor);
     }
 }
 
@@ -307,22 +284,16 @@ fn test_state_encoding()
 {
     for i in 0..=3 {
         let floor = i as u8;
-
         let s = State::new(floor, &[]);
-        //println!("test1: floor={floor} value={:#32b}", s.value);
-
-        assert_eq!(floor, s.get_elevator_pos());
+        assert_eq!(floor, s.get_elevator_position());
     }
 
     for i in 0..=3 {
         let floor = i as u8;
-
         let s = State::new(floor, &[ (0,1), (2,3) ]);
-        //println!("test2: floor={floor} value={:#32b}", s.value);
-
-        assert_eq!(floor, s.get_elevator_pos());
-        assert_eq!((0,1), s.get_element_pos(0));
-        assert_eq!((2,3), s.get_element_pos(1));
+        assert_eq!(floor, s.get_elevator_position());
+        assert_eq!((0,1), s.get_element_position(0));
+        assert_eq!((2,3), s.get_element_position(1));
     }
 }
 
@@ -333,6 +304,7 @@ fn parse_input(filename: &String) -> HashMap<u8, (u8, u8)> {
         panic!();
     }
 
+    // element_name -> element_id (determines position in state-bitmap)
     let mut element_ids: HashMap<String, u8> = HashMap::new();
     let mut get_element_id = |element_name: String| -> u8 {
         if let Some(id) = element_ids.get(&element_name) {
@@ -346,21 +318,16 @@ fn parse_input(filename: &String) -> HashMap<u8, (u8, u8)> {
     // element_id -> (generator_pos, chip_pos)
     let mut positions: HashMap<u8, (u8, u8)> = HashMap::new();
     let mut set_position_of_x = |element_id: u8, floor: u8, is_chip: bool| {
-        // is this how it's done? not too sure ^^
         let mut val: (u8,u8) = *positions.get(&element_id).unwrap_or( &(0,0) );
-
         if is_chip {
             val.1 = floor;
         } else {
             val.0 = floor;
         }
-
         positions.insert(element_id, val);
     };
 
-    for line in content.unwrap().lines()
-    {
-        //println!("line: '{line}'");
+    for line in content.unwrap().lines() {
 
         let split_chars: &[_] = &[' '];
         let trim_chars: &[_] = &['.', ','];
@@ -372,24 +339,17 @@ fn parse_input(filename: &String) -> HashMap<u8, (u8, u8)> {
             .filter(|s| !filter_words.contains(s))
             .map(|s| sanitize_element_name(s))
             .collect();
-        //println!("{parts:#?}");
 
         match parts.as_slice() {
             ["The", floor_name, "floor", "contains", ..] => {
-
                 let floor = parse_floor_name(floor_name);
-                //println!(">>> {floor}");
-
                 let remain = &parts[4..];
                 assert!(remain.len() % 2 == 0); // Must be multiple of 2
-                //println!(">>> {remain:?}");
 
                 for pair in remain.chunks(2) {
                     match pair {
                         [element, kind] => {
                             let element_id = get_element_id(element.to_string());
-                            //println!("Pair: '{element}' {element_id} '{kind}'");
-
                             let is_chip = *kind == "microchip";
                             set_position_of_x(element_id, floor, is_chip);
                         },
@@ -405,8 +365,7 @@ fn parse_input(filename: &String) -> HashMap<u8, (u8, u8)> {
     return positions;
 }
 
-fn sanitize_element_name(name: &str) -> &str
-{
+fn sanitize_element_name(name: &str) -> &str {
     let bad_word = "-compatible";
     if name.ends_with(bad_word) {
         &name[0.. name.len() - bad_word.len()]
@@ -426,7 +385,6 @@ fn parse_floor_name(name: &str) -> u8 {
 }
 
 fn convert_positions_to_state(positions: &HashMap<u8, (u8, u8)>) -> State {
-
     let mut positions_vector: Vec<(u8, u8)> = Vec::new();
 
     for i in 0..positions.len() {
@@ -436,6 +394,3 @@ fn convert_positions_to_state(positions: &HashMap<u8, (u8, u8)>) -> State {
 
     return State::new(0, &positions_vector );
 }
-
-
-
