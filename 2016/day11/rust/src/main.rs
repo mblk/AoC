@@ -1,6 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::time::Instant;
 
 fn main() {
+
+    let start_time = Instant::now();
+
     if std::env::args().len() != 2 {
         eprintln!("Missing input file");
         return;
@@ -8,7 +12,7 @@ fn main() {
 
     let filename = std::env::args().nth(1).unwrap();
     let positions = parse_input(&filename);
-    let num_elements = positions.len() as u8;
+    let num_elements = positions.len() as u32;
 
     let initial_state = convert_positions_to_state(&positions);
     println!("initial state: {:#b}", initial_state.value);
@@ -16,9 +20,13 @@ fn main() {
 
     let num_steps = find_minimum_steps_to_goal(initial_state, num_elements);
     println!("Minimum steps to solution: {num_steps}");
+
+    let total_runtime = start_time.elapsed();
+
+    println!("Total runtime: {:?}", total_runtime);
 }
 
-fn find_minimum_steps_to_goal(initial_state: State, num_elements: u8) -> u32 {
+fn find_minimum_steps_to_goal(initial_state: State, num_elements: u32) -> u32 {
 
     let mut closed_list: HashSet<u32> = HashSet::new();
     let mut open_list: VecDeque<(State,u32)> = VecDeque::new();
@@ -63,14 +71,39 @@ struct State {
 }
 
 impl State {
-    fn new(elevator: u8, positions: &[(u8,u8)] ) -> State {
+    fn new(elevator: u32, positions: &[(u32,u32)] ) -> State {
         State {
             value: Self::encode_value(elevator, positions),
         }
     }
 
-    fn encode_value(elevator: u8, positions: &[(u8,u8)]) -> u32 {
-        assert!(2 + 2 * positions.len() <= 32, "Too many elements, can't encode state in 32 bits");
+    fn with_elevator(&self, elevator: u32) -> State {
+        assert!(elevator <= 3);
+        return State {
+            value: self.value & !3 | elevator,
+        };
+    }
+
+    fn with_gen(&self, element_id: u32, new_gen_pos: u32) -> State {
+        let offset: u32 = 2 + 4 * element_id;
+        assert!(offset <= 30);
+        assert!(new_gen_pos <= 3);
+        return State {
+            value: self.value & !(3<<offset) | (new_gen_pos<<offset),
+        };
+    }
+
+    fn with_chip(&self, element_id: u32, new_chip_pos: u32) -> State {
+        let offset: u32 = 2 + 2 + 4 * element_id;
+        assert!(offset <= 30);
+        assert!(new_chip_pos <= 3);
+        return State {
+            value: self.value & !(3<<offset) | (new_chip_pos<<offset),
+        };
+    }
+
+    fn encode_value(elevator: u32, positions: &[(u32,u32)]) -> u32 {
+        assert!(2 + 4 * positions.len() <= 32, "Too many elements, can't encode state in 32 bits");
         let mut offset: u32 = 0;
         let mut value: u32 = 0;
 
@@ -89,20 +122,21 @@ impl State {
         return value;
     }
 
-    fn get_elevator_position(&self) -> u8 {
-        (self.value & 0x03) as u8
+    fn get_elevator_position(&self) -> u32 {
+        self.value & 0x03
     }
 
-    fn get_element_position(&self, element_id: u8) -> (u8, u8) {
+    fn get_element_position(&self, element_id: u32) -> (u32, u32) {
         let mut temp = self.value >> (2 + element_id * 4);
-        let a = (temp & 0x03) as u8;
+        let a = temp & 0x03;
         temp = temp >> 2;
-        let b = (temp & 0x03) as u8;
+        let b = temp & 0x03;
         return (a,b);
     }
 
-    fn get_all_element_positions(&self, num_elements: u8) -> Vec<(u8,u8)> {
-        let mut positions = Vec::new();
+    #[allow(dead_code)] // Used by test
+    fn get_all_element_positions(&self, num_elements: u32) -> Vec<(u32,u32)> {
+        let mut positions = Vec::with_capacity(num_elements as usize);
         for elem in 0..num_elements {
             let p = self.get_element_position(elem);
             positions.push(p);
@@ -110,7 +144,7 @@ impl State {
         return positions;
     }
 
-    fn pretty_print(&self, num_elements: u8) {
+    fn pretty_print(&self, num_elements: u32) {
         let elev_pos = self.get_elevator_position();
         for floor in (0..4).rev() {
             let elev_str = if floor == elev_pos { "E" } else { "." };
@@ -126,55 +160,53 @@ impl State {
         }
     }
 
-    fn get_all_possible_next_states(&self, num_elements: u8) -> Vec<State> {
+    fn get_all_possible_next_states(&self, num_elements: u32) -> Vec<State> {
         let num_floors = 4;
-        let elev_pos = self.get_elevator_position();
+        let current_pos = self.get_elevator_position();
         
-        let mut available_gens: Vec<u8> = Vec::with_capacity(num_elements as usize);
-        let mut available_chips: Vec<u8> = Vec::with_capacity(num_elements as usize);
+        let mut available_gens: Vec<u32> = Vec::with_capacity(num_elements as usize);
+        let mut available_chips: Vec<u32> = Vec::with_capacity(num_elements as usize);
 
         for elem in 0..num_elements {
             let p = self.get_element_position(elem);
-            if p.0 == elev_pos {
+            if p.0 == current_pos {
                 available_gens.push(elem);
             }
-            if p.1 == elev_pos {
+            if p.1 == current_pos {
                 available_chips.push(elem);
             }
         }
 
-        let mut available_next_states: Vec<State> = Vec::new();
+        let mut available_next_states: Vec<State> = Vec::with_capacity(10);
 
-        let can_go_up = elev_pos < num_floors-1;
-        let can_go_down = elev_pos > 0;
+        let can_go_up = current_pos < num_floors-1;
+        let can_go_down = current_pos > 0;
 
         // Case 1: Take one gen
         for gen in &available_gens {
-            let mut positions = self.get_all_element_positions(num_elements);
             if can_go_up {
-                let pos_up = elev_pos + 1;
-                positions[*gen as usize].0 = pos_up;
-                available_next_states.push(State::new(pos_up, &positions));
+                available_next_states.push(self
+                    .with_elevator(current_pos + 1)
+                    .with_gen(*gen, current_pos + 1));
             }
             if can_go_down {
-                let pos_down = elev_pos - 1;
-                positions[*gen as usize].0 = pos_down;
-                available_next_states.push(State::new(pos_down, &positions));
+                 available_next_states.push(self
+                    .with_elevator(current_pos - 1)
+                    .with_gen(*gen, current_pos - 1));
             }
         }
 
         // Case 2: Take on chip
         for chip in &available_chips {
-            let mut positions = self.get_all_element_positions(num_elements);
             if can_go_up {
-                let pos_up = elev_pos + 1;
-                positions[*chip as usize].1 = pos_up;
-                available_next_states.push(State::new(pos_up, &positions));
+                available_next_states.push(self
+                                           .with_elevator(current_pos + 1)
+                                           .with_chip(*chip, current_pos + 1));
             }
             if can_go_down {
-                let pos_down = elev_pos - 1;
-                positions[*chip as usize].1 = pos_down;
-                available_next_states.push(State::new(pos_down, &positions));
+                 available_next_states.push(self
+                                            .with_elevator(current_pos - 1)
+                                            .with_chip(*chip, current_pos - 1));
             }
         }
 
@@ -184,18 +216,21 @@ impl State {
                 for gen2 in &available_gens {
                     if *gen1 >= *gen2 { continue; }
 
-                    let mut positions = self.get_all_element_positions(num_elements);
                     if can_go_up {
-                        let pos_up = elev_pos + 1;
-                        positions[*gen1 as usize].0 = pos_up;
-                        positions[*gen2 as usize].0 = pos_up;
-                        available_next_states.push(State::new(pos_up, &positions));
+                        let up_pos = current_pos + 1;
+                        available_next_states.push(self
+                                                   .with_elevator(up_pos)
+                                                   .with_gen(*gen1, up_pos)
+                                                   .with_gen(*gen2, up_pos)
+                                                   );
                     }
                     if can_go_down {
-                        let pos_down = elev_pos - 1;
-                        positions[*gen1 as usize].0 = pos_down;
-                        positions[*gen2 as usize].0 = pos_down;
-                        available_next_states.push(State::new(pos_down, &positions));
+                        let down_pos = current_pos - 1;
+                        available_next_states.push(self
+                                                   .with_elevator(down_pos)
+                                                   .with_gen(*gen1, down_pos)
+                                                   .with_gen(*gen2, down_pos)
+                                                   );
                     }
                 }
             }
@@ -207,18 +242,21 @@ impl State {
                 for chip2 in &available_chips {
                     if *chip1 >= *chip2 { continue; }
 
-                    let mut positions = self.get_all_element_positions(num_elements);
                     if can_go_up {
-                        let pos_up = elev_pos + 1;
-                        positions[*chip1 as usize].1 = pos_up;
-                        positions[*chip2 as usize].1 = pos_up;
-                        available_next_states.push(State::new(pos_up, &positions));
+                        let up_pos = current_pos + 1;
+                        available_next_states.push(self
+                                                   .with_elevator(up_pos)
+                                                   .with_chip(*chip1, up_pos)
+                                                   .with_chip(*chip2, up_pos)
+                                                   );
                     }
                     if can_go_down {
-                        let pos_down = elev_pos - 1;
-                        positions[*chip1 as usize].1 = pos_down;
-                        positions[*chip2 as usize].1 = pos_down;
-                        available_next_states.push(State::new(pos_down, &positions));
+                        let down_pos = current_pos - 1;
+                        available_next_states.push(self
+                                                   .with_elevator(down_pos)
+                                                   .with_chip(*chip1, down_pos)
+                                                   .with_chip(*chip2, down_pos)
+                                                   );
                     }
                 }
             }
@@ -227,18 +265,22 @@ impl State {
         // Case 5: Take gen + chip
         for gen in &available_gens {
             for chip in &available_chips {
-                let mut positions = self.get_all_element_positions(num_elements);
+
                 if can_go_up {
-                    let pos_up = elev_pos + 1;
-                    positions[*gen as usize].0 = pos_up;
-                    positions[*chip as usize].1 = pos_up;
-                    available_next_states.push(State::new(pos_up, &positions));
+                    let up_pos = current_pos + 1;
+                    available_next_states.push(self
+                                               .with_elevator(up_pos)
+                                               .with_gen(*gen, up_pos)
+                                               .with_chip(*chip, up_pos)
+                                              );
                 }
                 if can_go_down {
-                    let pos_down = elev_pos - 1;
-                    positions[*gen as usize].0 = pos_down;
-                    positions[*chip as usize].1 = pos_down;
-                    available_next_states.push(State::new(pos_down, &positions));
+                    let down_pos = current_pos - 1;
+                    available_next_states.push(self
+                                               .with_elevator(down_pos)
+                                               .with_gen(*gen, down_pos)
+                                               .with_chip(*chip, down_pos)
+                                              );
                 }
             }
         }
@@ -246,15 +288,15 @@ impl State {
         return available_next_states;
     }
 
-    fn is_legal(&self, num_elements: u8) -> bool {
-        let positions = self.get_all_element_positions(num_elements);
+    fn is_legal(&self, num_elements: u32) -> bool {
         for elem in 0..num_elements {
-            let is_shielded = positions[elem as usize].0 == positions[elem as usize].1;
-            let mut is_radiated: bool = false;
+            let p = self.get_element_position(elem);
+            let is_shielded = p.0 == p.1;
 
+            let mut is_radiated: bool = false;
             for other_elem in 0..num_elements {
                 if elem == other_elem { continue; }
-                if positions[other_elem as usize].0 == positions[elem as usize].1 {
+                if self.get_element_position(other_elem).0 == p.1 {
                     is_radiated = true;
                 }
             }
@@ -268,14 +310,18 @@ impl State {
         return true;
     }
 
-    fn is_goal(&self, num_elements: u8) -> bool {
+    fn is_goal(&self, num_elements: u32) -> bool {
         let num_floors = 4;
         let goal_floor = num_floors - 1;
 
-        // All the things at the top floor?
-        return self.get_all_element_positions(num_elements)
-            .iter()
-            .all(|t| t.0 == goal_floor && t.1 == goal_floor);
+        for elem in 0..num_elements {
+            let p = self.get_element_position(elem);
+            if p.0 != goal_floor || p.1 != goal_floor {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
@@ -283,21 +329,50 @@ impl State {
 fn test_state_encoding()
 {
     for i in 0..=3 {
-        let floor = i as u8;
-        let s = State::new(floor, &[]);
-        assert_eq!(floor, s.get_elevator_position());
+        let s = State::new(i, &[]);
+        assert_eq!(i, s.get_elevator_position());
     }
 
     for i in 0..=3 {
-        let floor = i as u8;
-        let s = State::new(floor, &[ (0,1), (2,3) ]);
-        assert_eq!(floor, s.get_elevator_position());
+        let s = State::new(i, &[ (0,1), (2,3) ]);
+        assert_eq!(i, s.get_elevator_position());
         assert_eq!((0,1), s.get_element_position(0));
         assert_eq!((2,3), s.get_element_position(1));
     }
 }
 
-fn parse_input(filename: &String) -> HashMap<u8, (u8, u8)> {
+#[test]
+fn test_state_with_methods()
+{
+    let s = State::new(0, &[ (0,0), (0,0), (0,0) ]);
+    assert_eq!(vec![ (0,0), (0,0), (0,0) ], s.get_all_element_positions(3));
+    
+    assert_eq!(vec![ (1,0), (0,0), (0,0) ], s.with_gen(0,1).get_all_element_positions(3));
+    assert_eq!(vec![ (0,0), (2,0), (0,0) ], s.with_gen(1,2).get_all_element_positions(3));
+    assert_eq!(vec![ (0,0), (0,0), (3,0) ], s.with_gen(2,3).get_all_element_positions(3));
+    assert_eq!(vec![ (0,1), (0,0), (0,0) ], s.with_chip(0,1).get_all_element_positions(3));
+    assert_eq!(vec![ (0,0), (0,2), (0,0) ], s.with_chip(1,2).get_all_element_positions(3));
+    assert_eq!(vec![ (0,0), (0,0), (0,3) ], s.with_chip(2,3).get_all_element_positions(3));
+
+    assert_eq!(0, s.get_elevator_position());
+    assert_eq!(0, s.with_elevator(0).get_elevator_position());
+    assert_eq!(3, s.with_elevator(3).get_elevator_position());
+
+    assert_eq!(
+        vec![ (2,3), (1,2), (3,1) ],
+        s
+        .with_chip(2,1)
+        .with_chip(1,2)
+        .with_chip(0,3)
+        .with_elevator(3)
+        .with_gen(0,2)
+        .with_gen(1,1)
+        .with_gen(2,0)
+        .with_gen(2,3)
+        .get_all_element_positions(3));
+}
+
+fn parse_input(filename: &String) -> HashMap<u32, (u32, u32)> {
     let content = std::fs::read_to_string(filename);
     if let Err(err) = content {
         eprintln!("Error: {err}");
@@ -305,20 +380,20 @@ fn parse_input(filename: &String) -> HashMap<u8, (u8, u8)> {
     }
 
     // element_name -> element_id (determines position in state-bitmap)
-    let mut element_ids: HashMap<String, u8> = HashMap::new();
-    let mut get_element_id = |element_name: String| -> u8 {
+    let mut element_ids: HashMap<String, u32> = HashMap::new();
+    let mut get_element_id = |element_name: String| -> u32 {
         if let Some(id) = element_ids.get(&element_name) {
             return *id;
         }
-        let next_id = element_ids.len() as u8;
+        let next_id = element_ids.len() as u32;
         element_ids.insert(element_name, next_id);
         return next_id;
     };
 
     // element_id -> (generator_pos, chip_pos)
-    let mut positions: HashMap<u8, (u8, u8)> = HashMap::new();
-    let mut set_position_of_x = |element_id: u8, floor: u8, is_chip: bool| {
-        let mut val: (u8,u8) = *positions.get(&element_id).unwrap_or( &(0,0) );
+    let mut positions: HashMap<u32, (u32, u32)> = HashMap::new();
+    let mut set_position_of_x = |element_id: u32, floor: u32, is_chip: bool| {
+        let mut val: (u32,u32) = *positions.get(&element_id).unwrap_or( &(0,0) );
         if is_chip {
             val.1 = floor;
         } else {
@@ -374,7 +449,7 @@ fn sanitize_element_name(name: &str) -> &str {
     }
 }
 
-fn parse_floor_name(name: &str) -> u8 {
+fn parse_floor_name(name: &str) -> u32 {
     match name {
         "first" => 0,
         "second" => 1,
@@ -384,11 +459,11 @@ fn parse_floor_name(name: &str) -> u8 {
     }
 }
 
-fn convert_positions_to_state(positions: &HashMap<u8, (u8, u8)>) -> State {
-    let mut positions_vector: Vec<(u8, u8)> = Vec::new();
+fn convert_positions_to_state(positions: &HashMap<u32, (u32, u32)>) -> State {
+    let mut positions_vector: Vec<(u32, u32)> = Vec::new();
 
     for i in 0..positions.len() {
-        let p = *positions.get(&(i as u8)).unwrap();
+        let p = *positions.get(&(i as u32)).unwrap();
         positions_vector.push(p);
     }
 
