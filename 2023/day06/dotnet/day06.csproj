@@ -10,5 +10,5 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\common\dotnet\aoc.common.csproj" />
   </ItemGroup>
-  
+
 </Project>

@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace day05;
+namespace aoc.common;
 
 public static class ObjectExtensions
 {

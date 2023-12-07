@@ -1,4 +1,6 @@
-﻿namespace day05;
+﻿using aoc.common;
+
+namespace day05;
 
 public static class Program
 {
@@ -6,7 +8,7 @@ public static class Program
     {
         var config = new ConfigParser(args[0])
             .Parse();
-        //config.DumpToConsole();
+        config.DumpToConsole();
 
         var valueMapper = new ValueMapper(config.Mappings);
 
