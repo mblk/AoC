@@ -1,13 +1,14 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace aoc.common;
 
 public static class ObjectExtensions
 {
-    public static T DumpToConsole<T>(this T obj, string? header = null)
+    public static T DumpToConsole<T>(this T obj, string? header = null,
+        [CallerArgumentExpression(nameof(obj))] string? expr = null)
     {
-        if (!String.IsNullOrWhiteSpace(header))
-            Console.WriteLine($"----- {header} -----");
+        Console.WriteLine($"----- {expr} ({header}) -----");
         
         var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions()
         {
