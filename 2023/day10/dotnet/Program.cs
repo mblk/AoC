@@ -1,6 +1,4 @@
-﻿using aoc.common;
-
-namespace day10;
+﻿namespace day10;
 
 public static class Program
 {
@@ -69,52 +67,33 @@ public static class Program
         var enclosedTiles = new List<Position>();
 
         for (var startX = 0; startX < map.Width; startX++)
-        {
-            var topLeft = new Position(startX, 0);
-            var isInside = false;
-            foreach (var p in ShootDiagonalRay(map, topLeft))
-            {
-                var isLoopPart = loop.ContainsKey(p);
-                if (isLoopPart)
-                {
-                    if (ToggleInsideOutside(map.Get(p)))
-                        isInside = !isInside;
-                }
-                else
-                {
-                    if (isInside)
-                        enclosedTiles.Add(p);
-                }
-            }
-        }
-
+            shootDiagonalRay(new Position(startX, 0));
         for (var startY = 1; startY < map.Height; startY++)
-        {
-            var topLeft = new Position(0, startY);
-            var isInside = false;
-            foreach (var p in ShootDiagonalRay(map, topLeft))
-            {
-                var isLoopPart = loop.ContainsKey(p);
-                if (isLoopPart)
-                {
-                    if (ToggleInsideOutside(map.Get(p)))
-                        isInside = !isInside;
-                }
-                else
-                {
-                    if (isInside)
-                        enclosedTiles.Add(p);
-                }
-            }
-        }
+            shootDiagonalRay(new Position(0, startY));
 
         return enclosedTiles;
+
+        void shootDiagonalRay(Position topLeft)
+        {
+            var isInside = false;
+            foreach (var p in GetDiagonalRayPositions(map, topLeft))
+            {
+                var isLoopPart = loop.ContainsKey(p);
+                if (isLoopPart)
+                {
+                    if (ShouldToggleInsideOutside(map.Get(p)))
+                        isInside = !isInside;
+                }
+                else
+                {
+                    if (isInside)
+                        enclosedTiles.Add(p);
+                }
+            }
+        }
     }
 
-    private static bool ToggleInsideOutside(Tile tile) =>
-        tile is Tile.Horizontal or Tile.Vertical or Tile.NorthWest or Tile.SouthEast;
-
-    private static IEnumerable<Position> ShootDiagonalRay(Map map, Position topLeft)
+    private static IEnumerable<Position> GetDiagonalRayPositions(Map map, Position topLeft)
     {
         var offset = 0;
         while (true)
@@ -125,4 +104,7 @@ public static class Program
             yield return p;
         }
     }
+
+    private static bool ShouldToggleInsideOutside(Tile tile) =>
+        tile is Tile.Horizontal or Tile.Vertical or Tile.NorthWest or Tile.SouthEast;
 }
