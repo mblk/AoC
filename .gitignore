@@ -3,6 +3,7 @@ target/
 
 # zig stuff
 zig-cache/
+.zig-cache/
 
 # default VS stuff below...
 
